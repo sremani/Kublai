@@ -25,21 +25,26 @@ let private buildClient () =
 
     createClient config
 
-let private ensureMinioAvailable (endpoint: string) =
+let private ensureObjectStorageAvailable (endpoint: string) =
     use client = new HttpClient()
     client.Timeout <- TimeSpan.FromSeconds(2.0)
 
     try
-        // MinIO often returns 403 at root without auth; that still proves reachability.
+        // S3-compatible stores often return 403/404 at root without auth; any response proves reachability.
         use response = client.GetAsync(Uri(endpoint)).Result
         ignore response.StatusCode
     with ex ->
-        raise (SkipException.ForSkip($"Skipping object storage test: MinIO unavailable at {endpoint}. Details: {ex.Message}"))
+        raise (SkipException.ForSkip($"Skipping object storage test: S3-compatible store unavailable at {endpoint}. Details: {ex.Message}"))
 
 let private requireOk result =
     match result with
     | Ok value -> value
     | Error err -> failwithf "Object storage operation failed: %A" err
+
+let private requireError result =
+    match result with
+    | Ok value -> failwithf "Expected object storage operation to fail, but it succeeded with: %A" value
+    | Error err -> err
 
 let private toCompletedPartEtag (response: HttpResponseMessage) =
     let headerValue =
@@ -57,55 +62,165 @@ let private toCompletedPartEtag (response: HttpResponseMessage) =
     else
         normalized
 
-[<Fact>]
-[<Trait("Category", "Integration")>]
-let ``Object storage client supports multipart upload and ranged download`` () =
+let private integrationContext () =
     let endpoint = readEnvOrDefault "ObjectStorage__Endpoint" "http://localhost:9000"
-    ensureMinioAvailable endpoint
+    ensureObjectStorageAvailable endpoint
+    buildClient (), CancellationToken.None
 
-    let client = buildClient ()
-    let ct = CancellationToken.None
-    let objectKey = $"phase2-object-storage-test-{Guid.NewGuid():N}.bin"
-    let payload = Encoding.UTF8.GetBytes("phase2-object-storage-payload")
-
+let private uploadObject (client: IObjectStorageClient) (ct: CancellationToken) (objectKey: string) (payload: byte array) =
     let session = client.StartMultipartUpload(objectKey, ct).Result |> requireOk
 
-    let presignedPart =
-        client.PresignUploadPart(session.ObjectKey, session.UploadId, 1, DateTimeOffset.UtcNow.AddMinutes(10.0))
+    try
+        let presignedPart =
+            client.PresignUploadPart(session.ObjectKey, session.UploadId, 1, DateTimeOffset.UtcNow.AddMinutes(10.0))
+            |> requireOk
+
+        use httpClient = new HttpClient()
+        use putContent = new ByteArrayContent(payload)
+        use putResponse = httpClient.PutAsync(presignedPart.Url, putContent).Result
+
+        Assert.True(
+            putResponse.IsSuccessStatusCode,
+            $"Expected successful part upload but received {(int putResponse.StatusCode)}."
+        )
+
+        let completedPartEtag = toCompletedPartEtag putResponse
+
+        client.CompleteMultipartUpload(
+            session.ObjectKey,
+            session.UploadId,
+            [ { PartNumber = 1; ETag = completedPartEtag } ],
+            ct
+        )
+        |> fun task -> task.Result
         |> requireOk
+        |> ignore
 
-    use httpClient = new HttpClient()
-    use putContent = new ByteArrayContent(payload)
-    use putResponse = httpClient.PutAsync(presignedPart.Url, putContent).Result
+        session.ObjectKey
+    with ex ->
+        client.AbortMultipartUpload(session.ObjectKey, session.UploadId, ct).Result |> ignore
+        raise ex
 
-    Assert.True(
-        putResponse.IsSuccessStatusCode,
-        $"Expected successful part upload but received {(int putResponse.StatusCode)}."
-    )
+let private readAllBytes (downloaded: DownloadedObject) =
+    use copy = new MemoryStream()
+    downloaded.Stream.CopyTo(copy)
+    downloaded.Dispose()
+    copy.ToArray()
 
-    let completedPartEtag = toCompletedPartEtag putResponse
+let private assertNotFound err =
+    match err with
+    | NotFound _ -> ()
+    | other -> failwithf "Expected NotFound, got %A" other
+
+let private assertInvalidRange err =
+    match err with
+    | InvalidRange _ -> ()
+    | other -> failwithf "Expected InvalidRange, got %A" other
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract check availability succeeds`` () =
+    let client, ct = integrationContext ()
+    client.CheckAvailability(ct).Result |> requireOk |> ignore
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract supports multipart upload full download and metadata`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"provider-contract-metadata-{Guid.NewGuid():N}.bin"
+    let payload = Encoding.UTF8.GetBytes("provider-contract-metadata-payload")
+
+    let uploadedKey = uploadObject client ct objectKey payload
+    let downloaded = client.DownloadObject(uploadedKey, None, ct).Result |> requireOk
+
+    Assert.Equal<int64>(int64 payload.Length, downloaded.ContentLength)
+    Assert.True(downloaded.ETag.IsSome, "Expected object storage provider to return an ETag.")
+    Assert.Equal<byte>(payload, readAllBytes downloaded)
+
+    client.DeleteObject(uploadedKey, ct).Result |> requireOk |> ignore
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract supports ranged download`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"provider-contract-range-{Guid.NewGuid():N}.bin"
+    let payload = Encoding.UTF8.GetBytes("provider-contract-range-payload")
+
+    let uploadedKey = uploadObject client ct objectKey payload
+    let ranged = client.DownloadObject(uploadedKey, Some(3L, Some 8L), ct).Result |> requireOk
+
+    Assert.Equal(Net.HttpStatusCode.PartialContent, ranged.StatusCode)
+    Assert.True(ranged.ContentRange.IsSome, "Expected object storage provider to return Content-Range.")
+    Assert.Equal<byte>(payload.[3..8], readAllBytes ranged)
+
+    client.DeleteObject(uploadedKey, ct).Result |> requireOk |> ignore
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract maps missing objects to not found`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"provider-contract-missing-{Guid.NewGuid():N}.bin"
+
+    client.DownloadObject(objectKey, None, ct).Result |> requireError |> assertNotFound
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract maps unsatisfiable ranges`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"provider-contract-invalid-range-{Guid.NewGuid():N}.bin"
+    let payload = Encoding.UTF8.GetBytes("range")
+
+    let uploadedKey = uploadObject client ct objectKey payload
+
+    client.DownloadObject(uploadedKey, Some(100L, Some 110L), ct).Result
+    |> requireError
+    |> assertInvalidRange
+
+    client.DeleteObject(uploadedKey, ct).Result |> requireOk |> ignore
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract deletes objects`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"provider-contract-delete-{Guid.NewGuid():N}.bin"
+    let payload = Encoding.UTF8.GetBytes("provider-contract-delete-payload")
+
+    let uploadedKey = uploadObject client ct objectKey payload
+    client.DeleteObject(uploadedKey, ct).Result |> requireOk |> ignore
+
+    client.DownloadObject(uploadedKey, None, ct).Result |> requireError |> assertNotFound
+
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage provider contract aborts incomplete multipart uploads`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"provider-contract-abort-{Guid.NewGuid():N}.bin"
+    let session = client.StartMultipartUpload(objectKey, ct).Result |> requireOk
+
+    client.AbortMultipartUpload(session.ObjectKey, session.UploadId, ct).Result |> requireOk |> ignore
 
     client.CompleteMultipartUpload(
         session.ObjectKey,
         session.UploadId,
-        [ { PartNumber = 1; ETag = completedPartEtag } ],
+        [ { PartNumber = 1; ETag = "aborted" } ],
         ct
     )
     |> fun task -> task.Result
-    |> requireOk
-    |> ignore
+    |> requireError
+    |> assertNotFound
 
-    let downloaded = client.DownloadObject(session.ObjectKey, None, ct).Result |> requireOk
+[<Fact>]
+[<Trait("Category", "Integration")>]
+let ``Object storage client supports multipart upload and ranged download`` () =
+    let client, ct = integrationContext ()
+    let objectKey = $"phase2-object-storage-test-{Guid.NewGuid():N}.bin"
+    let payload = Encoding.UTF8.GetBytes("phase2-object-storage-payload")
 
-    use fullCopy = new MemoryStream()
-    downloaded.Stream.CopyTo(fullCopy)
-    downloaded.Dispose()
-    Assert.Equal<byte>(payload, fullCopy.ToArray())
+    let uploadedKey = uploadObject client ct objectKey payload
+    let downloaded = client.DownloadObject(uploadedKey, None, ct).Result |> requireOk
+    Assert.Equal<byte>(payload, readAllBytes downloaded)
 
-    let ranged = client.DownloadObject(session.ObjectKey, Some(3L, Some 8L), ct).Result |> requireOk
-    use rangedCopy = new MemoryStream()
-    ranged.Stream.CopyTo(rangedCopy)
-    ranged.Dispose()
+    let ranged = client.DownloadObject(uploadedKey, Some(3L, Some 8L), ct).Result |> requireOk
+    Assert.Equal<byte>(payload.[3..8], readAllBytes ranged)
 
-    let expectedRange = payload.[3..8]
-    Assert.Equal<byte>(expectedRange, rangedCopy.ToArray())
+    client.DeleteObject(uploadedKey, ct).Result |> requireOk |> ignore

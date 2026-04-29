@@ -1,6 +1,6 @@
 # Enterprise GA Ticket Board
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 ## Purpose
 
@@ -73,6 +73,16 @@ following without direct maintainer intervention:
 | EGA-31 | Persist consolidated enterprise verification evidence | P0 | Release Evidence | done |
 | EGA-32 | Define kublai.com production hosting hardware plan | P0 | Launch Infrastructure | in_progress |
 | EGA-33 | Remove MinIO as strategic object-storage dependency | P0 | Storage/Launch Risk | in_progress |
+| EGA-35 | Evaluate Garage as MinIO replacement candidate | P0 | Storage/Launch Risk | done |
+| EGA-35T | Validate Garage compatibility evaluation lane | P0 | Validation | done |
+| EGA-36 | Expand Garage provider contract tests | P0 | Storage/Validation | done |
+| EGA-36T | Validate Garage provider contract tests in CI | P0 | Validation | done |
+| EGA-37 | Add Garage-backed CI compatibility lane | P0 | Storage/CI | done |
+| EGA-37T | Validate Garage CI evidence and report publication | P0 | Validation | done |
+| EGA-38 | Add Garage option for kind and Helm validation dependencies | P1 | Deployment | done |
+| EGA-38T | Validate Garage kind and Helm dependency option | P1 | Validation | done |
+| EGA-39 | Document Garage operations, licensing, and migration decision | P1 | Storage/Ops | done |
+| EGA-39T | Validate Garage go/no-go decision artifacts | P1 | Validation | done |
 | EGA-34 | Complete Kublai deep rebrand | P0 | Product/Branding | done |
 | EGA-34T | Validate Kublai rebrand coverage | P0 | Validation | done |
 | EGA-15 | Create procurement evidence pack | P1 | Procurement/Compliance | done |
@@ -434,6 +444,239 @@ Acceptance criteria:
 Status:
 - in_progress with exit plan in
   `docs/74-object-storage-independence-and-minio-exit-plan.md`
+
+### EGA-35: Evaluate Garage as MinIO replacement candidate
+
+Scope:
+- Evaluate Garage as the preferred self-hosted S3-compatible replacement
+  candidate before starting a Kublai-owned object-store project.
+- Validate the exact Kublai object-storage contract against Garage: bucket
+  bootstrap, object put/get/delete, multipart upload, range reads, presigned
+  URLs, metadata, auth signing, retries, and deterministic error behavior.
+- Add a temporary Garage-backed local or CI validation path that can run beside
+  the existing MinIO fixture until the replacement decision is made.
+- Document Garage operating constraints, AGPLv3 license obligations, backup and
+  restore posture, Helm/Compose deployment shape, monitoring needs, and
+  migration path from MinIO.
+- Decide whether the Boorchu side project remains necessary after Garage
+  compatibility and operations testing.
+
+Acceptance criteria:
+- A Garage compatibility matrix exists for all S3 operations Kublai uses.
+- Existing object-storage integration tests pass against Garage or each gap is
+  documented with severity and workaround.
+- Dev/kind/Helm deployment notes include a Garage option without removing the
+  current MinIO fixture prematurely.
+- Licensing and distribution implications of using Garage are documented for
+  Kublai releases and customer deployments.
+- The MinIO exit plan is updated with a go/no-go recommendation: adopt Garage,
+  keep managed S3 only, or bootstrap Boorchu.
+
+Status:
+- done
+- Garage is accepted as Kublai's maintained self-hosted validation and
+  reference-deployment dependency.
+- Managed S3-compatible storage remains preferred for `kublai.com` production.
+- Boorchu remains deferred unless
+  `docs/84-garage-operations-licensing-and-migration-decision.md` is
+  superseded by a Garage rejection or exception.
+
+### EGA-35T: Validate Garage compatibility evaluation lane
+
+Scope:
+- Add source-controlled checks that prove the Garage evaluation ticket has
+  runnable validation hooks and documented acceptance criteria.
+- Ensure the evaluation lane does not silently remove or replace the current
+  MinIO fixture before Garage is certified.
+
+Acceptance criteria:
+- A unit-level artifact test asserts that the EGA board, Garage evaluation
+  document, compose overlay, config, Make target, and validation script exist.
+- Formatting validation covers the new Garage documentation and scripts.
+- The validation lane names the exact Kublai object-storage integration test
+  used for Garage compatibility.
+
+Status:
+- done in `tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs`
+
+### EGA-36: Expand Garage provider contract tests
+
+Scope:
+- Extend object-storage integration coverage beyond the happy-path multipart
+  flow already proven against Garage.
+- Add provider-neutral tests for delete semantics, missing-object mapping,
+  invalid-range mapping, availability checks, metadata/ETag behavior, and
+  aborting incomplete multipart uploads.
+- Ensure the tests can run against MinIO, Garage, and managed S3-compatible
+  providers through the existing `ObjectStorage__*` environment variables.
+
+Acceptance criteria:
+- Provider contract tests cover put/get/delete, multipart abort, missing
+  object, invalid range, availability, metadata, presigned upload, and ranged
+  read behavior.
+- The Garage compatibility script runs the expanded provider contract suite,
+  not only one happy-path test.
+- Any Garage-specific behavioral difference is documented in
+  `docs/83-garage-minio-replacement-evaluation.md` with severity and
+  workaround.
+
+Status:
+- done in `tests/Kublai.Domain.Tests/ObjectStorageTests.fs`
+- Garage compatibility report now covers provider availability, delete,
+  missing-object, invalid-range, metadata/ETag, multipart abort, presigned
+  upload, full download, and ranged download behavior.
+
+### EGA-36T: Validate Garage provider contract tests in CI
+
+Scope:
+- Add validation coverage proving the expanded provider contract tests are
+  source-controlled, runnable, and included in the Garage compatibility report.
+- Ensure failures are easy to diagnose from test output and report evidence.
+
+Acceptance criteria:
+- Unit-level artifact tests assert that all required provider contract cases
+  are present.
+- `make test` covers the artifact assertions.
+- `make garage-compatibility-validate` reports each contract category in
+  `docs/reports/garage-compatibility-latest.md`.
+
+Status:
+- done in `tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs`
+- Artifact coverage asserts the provider contract test names and report
+  categories that `make garage-compatibility-validate` must keep publishing.
+
+### EGA-37: Add Garage-backed CI compatibility lane
+
+Scope:
+- Add a GitHub Actions workflow or CI job that runs the Garage compatibility
+  target on Linux runners.
+- Keep the lane separate from default MinIO integration until Garage is
+  accepted as the replacement.
+- Publish the Garage compatibility report as step summary or artifact.
+
+Acceptance criteria:
+- CI starts Garage, bootstraps layout/bucket/key, and runs the provider
+  contract suite.
+- The lane is triggered by changes to object-storage code, Garage compose/config,
+  the Garage validator, and the EGA-35 documentation.
+- A failed Garage compatibility run blocks object-storage changes once the lane
+  is stable.
+
+Status:
+- done in `.github/workflows/garage-compatibility.yml`
+- The workflow runs `make garage-compatibility-validate` on Linux runners,
+  triggers on Garage/object-storage/EGA-35 evidence changes, and keeps Garage
+  separate from the default MinIO integration lane.
+
+### EGA-37T: Validate Garage CI evidence and report publication
+
+Scope:
+- Add checks that the Garage CI lane exists, invokes the correct Make target,
+  and publishes the compatibility report.
+- Prevent future edits from leaving EGA-35 with only local validation.
+
+Acceptance criteria:
+- Artifact tests assert the workflow references
+  `make garage-compatibility-validate`.
+- Workflow publishes `docs/reports/garage-compatibility-latest.md`.
+- The EGA board links EGA-37 and EGA-37T as the CI evidence pair.
+
+Status:
+- done in `tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs`
+- Artifact coverage asserts the workflow invokes
+  `make garage-compatibility-validate`, appends
+  `docs/reports/garage-compatibility-latest.md` to the GitHub step summary,
+  and uploads the same report as the `garage-compatibility-report` artifact.
+
+### EGA-38: Add Garage option for kind and Helm validation dependencies
+
+Scope:
+- Add a selectable Garage dependency path for kind HA validation and Helm
+  certification without removing the current MinIO fixture.
+- Ensure chart values can point at Garage using the same S3-compatible
+  `ObjectStorage__*` contract.
+- Decide whether Garage should run as an in-cluster validation dependency or as
+  an external endpoint for kind/Helm tests.
+
+Acceptance criteria:
+- `kind-ha-validate` can run with Garage as the object-storage dependency.
+- `helm-certify` can run with Garage as the object-storage dependency.
+- The default path remains unchanged until Garage CI and operations gates pass.
+- Documentation explains how to choose MinIO, Garage, or managed S3-compatible
+  storage for validation.
+
+Status:
+- done in `scripts/kind-ha-validate.sh`, `scripts/helm-certify.sh`,
+  `deploy/kind/dependencies-garage.yaml`, and
+  `deploy/helm/kublai/values-kind-garage.yaml`
+- `KIND_OBJECT_STORAGE_PROVIDER=garage make kind-ha-validate` and
+  `HELM_CERT_OBJECT_STORAGE_PROVIDER=garage make helm-certify` select Garage.
+- `*_OBJECT_STORAGE_PROVIDER=external` keeps the same S3-compatible config
+  surface for managed object storage.
+
+### EGA-38T: Validate Garage kind and Helm dependency option
+
+Scope:
+- Add validation evidence for the Garage kind/Helm option.
+- Ensure the dependency switch is covered by scripts or artifact tests so it
+  cannot drift silently.
+
+Acceptance criteria:
+- Artifact tests assert the kind/Helm scripts expose a Garage dependency option.
+- Helm/kind validation reports state which object-storage provider was used.
+- Garage dependency validation is linked from the MinIO exit plan.
+
+Status:
+- done in `tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs`
+- Artifact coverage asserts the kind/Helm scripts expose `garage` and
+  `external` provider modes, apply `deploy/kind/dependencies-garage.yaml`, use
+  `deploy/helm/kublai/values-kind-garage.yaml`, and keep MinIO as the default.
+
+### EGA-39: Document Garage operations, licensing, and migration decision
+
+Scope:
+- Document Garage backup/restore, disk layout, TLS/reverse-proxy assumptions,
+  metrics, upgrades, key rotation, and failure recovery.
+- Document AGPLv3 distribution implications and the project owner's decision on
+  whether Garage may be included in supported Kublai release/deployment
+  artifacts.
+- Define the MinIO-to-Garage migration path for local/self-hosted users.
+- Produce the go/no-go recommendation: adopt Garage, keep managed S3 only, or
+  bootstrap Boorchu.
+
+Acceptance criteria:
+- Operations documentation covers day-0, day-1, and day-2 Garage workflows.
+- Licensing notes are explicit enough for release and procurement review.
+- Migration notes cover bucket creation, credential creation, object copy,
+  verification, rollback, and unsupported assumptions.
+- Boorchu remains deferred unless the decision record rejects Garage.
+
+Status:
+- done in `docs/84-garage-operations-licensing-and-migration-decision.md`
+- The decision record covers day-0/day-1/day-2 operations, backup/restore,
+  AGPLv3 release posture, MinIO-to-Garage migration, rollback, unsupported
+  assumptions, and the go/no-go decision.
+
+### EGA-39T: Validate Garage go/no-go decision artifacts
+
+Scope:
+- Add checks that the Garage operations/licensing/migration documentation and
+  decision record exist before closing EGA-35.
+- Ensure Boorchu cannot be started as a replacement project without an explicit
+  Garage rejection or exception.
+
+Acceptance criteria:
+- Artifact tests assert the Garage operations document includes backup/restore,
+  AGPLv3, migration, and go/no-go sections.
+- The MinIO exit plan links to the final Garage decision record.
+- The enterprise GA board marks EGA-35 done only after EGA-36 through EGA-39T
+  are closed or explicitly deferred.
+
+Status:
+- done in `tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs`
+- Artifact coverage asserts the Garage operations/licensing/migration decision
+  record exists, the MinIO exit plan links it, EGA-35 through EGA-39T are done,
+  and Boorchu remains deferred unless Garage is rejected or excepted.
 
 ### EGA-15: Create procurement evidence pack
 

@@ -9,7 +9,7 @@ PROJECTS := \
 TEST_PROJECTS := \
 	tests/Kublai.Domain.Tests/Kublai.Domain.Tests.fsproj
 
-.PHONY: help restore build test test-integration test-integration-full format dev-up dev-down dev-logs wait-db storage-bootstrap db-migrate db-smoke db-backup db-restore phase6-drill reliability-drill search-soak-drill performance-workflow-baseline performance-soak-drill verify-enterprise production-preflight kind-ha-validate helm-certify helm-cloud-examples-validate release-provenance-certify upgrade-compatibility-drill release-artifact-drill-validate offline-install-plan-validate admin-cli mutation-spike mutation-track mutation-fsharp-native mutation-fsharp-native-score mutation-fsharp-native-trend mutation-fsharp-native-burnin mutation-trackb-bootstrap mutation-trackb-build mutation-trackb-spike mutation-trackb-assert mutation-trackb-compile-validate smoke phase1-demo phase2-demo phase2-load phase3-demo phase4-demo phase5-demo phase6-demo phase7-demo
+.PHONY: help restore build test test-integration test-integration-full format dev-up dev-down dev-logs wait-db storage-bootstrap garage-compatibility-validate db-migrate db-smoke db-backup db-restore phase6-drill reliability-drill search-soak-drill performance-workflow-baseline performance-soak-drill verify-enterprise production-preflight kind-ha-validate helm-certify helm-cloud-examples-validate release-provenance-certify upgrade-compatibility-drill release-artifact-drill-validate offline-install-plan-validate admin-cli mutation-spike mutation-track mutation-fsharp-native mutation-fsharp-native-score mutation-fsharp-native-trend mutation-fsharp-native-burnin mutation-trackb-bootstrap mutation-trackb-build mutation-trackb-spike mutation-trackb-assert mutation-trackb-compile-validate smoke phase1-demo phase2-demo phase2-load phase3-demo phase4-demo phase5-demo phase6-demo phase7-demo
 
 help:
 	@echo "Targets:"
@@ -24,6 +24,7 @@ help:
 	@echo "  dev-logs           Tail dependency logs"
 	@echo "  wait-db            Wait until Postgres is ready"
 	@echo "  storage-bootstrap  Create MinIO bucket for development"
+	@echo "  garage-compatibility-validate  Run Kublai object-storage contract tests against Garage"
 	@echo "  db-migrate         Apply SQL migrations"
 	@echo "  db-smoke           Verify baseline schema exists"
 	@echo "  db-backup          Create Postgres backup file (set BACKUP_PATH to override)"
@@ -127,6 +128,9 @@ wait-db:
 
 storage-bootstrap:
 	./scripts/bootstrap-storage.sh
+
+garage-compatibility-validate: build
+	./scripts/garage-compatibility-validate.sh
 
 db-migrate: wait-db
 	./scripts/db-migrate.sh

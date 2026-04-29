@@ -1,0 +1,7 @@
+config:
+  ObjectStorage__Endpoint: http://garage:3900
+  ObjectStorage__Bucket: kublai-dev
+
+secretConfig:
+  ObjectStorage__AccessKey: generated-by-garage-bootstrap
+  ObjectStorage__SecretKey: generated-by-garage-bootstrap

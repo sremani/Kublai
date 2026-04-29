@@ -1,0 +1,24 @@
+name: kublai-garage
+
+services:
+  garage:
+    image: ${GARAGE_IMAGE:-dxflrs/garage:v2.3.0}
+    command: ["/garage", "server"]
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+      - "3903:3903"
+    volumes:
+      - ./deploy/garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD-SHELL", "/garage status >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+volumes:
+  garage-meta:
+  garage-data:

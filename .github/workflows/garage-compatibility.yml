@@ -1,0 +1,77 @@
+name: garage-compatibility
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/garage-compatibility.yml"
+      - "Makefile"
+      - "docker-compose.garage.yml"
+      - "deploy/garage/**"
+      - "docs/58-enterprise-ga-ticket-board.md"
+      - "docs/74-object-storage-independence-and-minio-exit-plan.md"
+      - "docs/83-garage-minio-replacement-evaluation.md"
+      - "scripts/garage-compatibility-validate.sh"
+      - "src/Kublai.Api/ObjectStorage.fs"
+      - "tests/Kublai.Domain.Tests/ObjectStorageTests.fs"
+      - "tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs"
+      - "Kublai.sln"
+      - "Directory.Build.props"
+      - "global.json"
+  push:
+    branches:
+      - master
+      - main
+      - "codex/**"
+    paths:
+      - ".github/workflows/garage-compatibility.yml"
+      - "Makefile"
+      - "docker-compose.garage.yml"
+      - "deploy/garage/**"
+      - "docs/58-enterprise-ga-ticket-board.md"
+      - "docs/74-object-storage-independence-and-minio-exit-plan.md"
+      - "docs/83-garage-minio-replacement-evaluation.md"
+      - "scripts/garage-compatibility-validate.sh"
+      - "src/Kublai.Api/ObjectStorage.fs"
+      - "tests/Kublai.Domain.Tests/ObjectStorageTests.fs"
+      - "tests/Kublai.Domain.Tests/EnterpriseGaTicketArtifactTests.fs"
+      - "Kublai.sln"
+      - "Directory.Build.props"
+      - "global.json"
+
+permissions:
+  contents: read
+
+jobs:
+  garage-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Run Garage compatibility validation
+        run: make garage-compatibility-validate
+
+      - name: Publish Garage compatibility summary
+        if: always()
+        run: |
+          if [ -f docs/reports/garage-compatibility-latest.md ]; then
+            cat docs/reports/garage-compatibility-latest.md >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "Garage compatibility report was not generated." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload Garage compatibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: garage-compatibility-report
+          path: docs/reports/garage-compatibility-latest.md
+          if-no-files-found: error

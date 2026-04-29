@@ -1,6 +1,6 @@
 # Object Storage Independence And MinIO Exit Plan
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 ## Purpose
 
@@ -46,11 +46,28 @@ Use a managed S3-compatible provider:
 The Kublai deployment must validate against the selected managed object
 store before production cutover.
 
-## Side Project Proposal
+## Replacement Candidate Decision
 
-Create a separate side project for an Kublai-owned object store:
+Before creating a Kublai-owned object-store project, evaluate Garage as the
+preferred maintained self-hosted replacement candidate.
 
-- working name: `FortressStore`
+Garage is attractive because it is already a Rust, S3-compatible,
+self-hostable object store designed for small-to-medium distributed
+deployments. It should be treated as a candidate dependency, not assumed safe
+until Kublai's exact object-storage contract passes against it.
+
+If Garage passes compatibility, operations, and licensing review, prefer Garage
+over building a new object store.
+
+Garage has now passed the Kublai validation, operations, migration, and
+licensing review gates for validation and self-hosted reference deployments.
+The final decision record is
+`docs/84-garage-operations-licensing-and-migration-decision.md`.
+
+If Garage fails on a launch-critical requirement, create a separate side
+project for a Kublai-owned object store:
+
+- working name: `Boorchu`
 - purpose: small, boring, S3-compatible object storage for Kublai
   deployments and tests
 - license: choose deliberately before coding
@@ -98,13 +115,16 @@ Phase 1: dependency boundary
 Phase 2: replacement evaluation
 
 - Compare managed providers: DigitalOcean Spaces, AWS S3, Cloudflare R2.
-- Compare self-hosted alternatives and maintained forks.
-- Decide whether `FortressStore` is worth building before first production
-  customer or should remain a follow-up.
+- Evaluate Garage as the primary self-hosted replacement candidate.
+- Compare any other maintained self-hosted alternatives only if Garage fails
+  Kublai's compatibility or operations gates.
+- Decide whether `Boorchu` is worth building before first production customer
+  or should remain a follow-up.
 
 Phase 3: side-project bootstrap
 
-- Create the `FortressStore` repository.
+- Create the `Boorchu` repository only if the Garage evaluation fails or leaves
+  unacceptable launch risk.
 - Define the S3 subset contract.
 - Build an Kublai object-storage conformance test suite.
 - Implement single-node local mode.
@@ -125,16 +145,39 @@ Phase 4: production hardening
 - Add provider-specific object-storage examples for the selected production
   provider.
 - Add contract tests that can run against MinIO, managed S3-compatible storage,
-  and future `FortressStore`.
+  Garage, and future `Boorchu` if needed.
+- Use `make garage-compatibility-validate` as the first Garage contract test
+  lane while MinIO remains the default local fixture.
+- Run `.github/workflows/garage-compatibility.yml` as the separate Garage CI
+  evidence lane for object-storage and Garage evaluation changes.
+- Allow kind HA and Helm certification to select `minio`, `garage`, or
+  `external` S3-compatible object storage while keeping MinIO as the temporary
+  default.
 - Add a release gate requiring object-storage provider certification for
   `kublai.com`.
+- Use `docs/84-garage-operations-licensing-and-migration-decision.md` as the
+  Garage go/no-go decision record and Boorchu deferral gate.
 
 ## Acceptance Criteria
 
 - A ticket exists on the enterprise GA board.
 - Production hosting plan stops implying MinIO for production.
 - Local validation docs identify MinIO as temporary.
-- A side-project decision record exists for `FortressStore`.
+- A Garage evaluation ticket exists with compatibility, licensing, operations,
+  and migration acceptance criteria.
+- The first Garage validation hook exists and runs the Kublai object-storage
+  integration test against Garage.
+- The Garage compatibility workflow publishes
+  `docs/reports/garage-compatibility-latest.md` as CI summary and artifact
+  evidence.
+- `KIND_OBJECT_STORAGE_PROVIDER=garage make kind-ha-validate` and
+  `HELM_CERT_OBJECT_STORAGE_PROVIDER=garage make helm-certify` are documented
+  provider-selection paths.
+- `docs/84-garage-operations-licensing-and-migration-decision.md` documents
+  Garage operations, AGPLv3 release posture, backup/restore, MinIO migration,
+  rollback, and the final go/no-go decision.
+- `Boorchu` remains deferred unless the Garage decision record is superseded by
+  an explicit Garage rejection or exception.
 - Kublai has an object-storage compatibility test plan.
 - `kublai.com` production cutover uses managed object storage until a
   supported replacement is validated.
@@ -146,3 +189,5 @@ Phase 4: production hardening
   `docs/73-kublai-com-production-hosting-plan.md`
 - Kublai production cutover:
   `docs/72-installation-and-production-cutover-guide.md`
+- Garage operations, licensing, migration, and final decision:
+  `docs/84-garage-operations-licensing-and-migration-decision.md`

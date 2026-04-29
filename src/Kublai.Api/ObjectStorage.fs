@@ -294,7 +294,7 @@ type private S3ObjectStorageClient(config: ObjectStorageConfig) =
                                 if String.IsNullOrWhiteSpace value then None else Some value
 
                             let contentRange =
-                                let value = response.Headers["Content-Range"]
+                                let value = response.ContentRange
                                 if String.IsNullOrWhiteSpace value then None else Some value
 
                             let etag =

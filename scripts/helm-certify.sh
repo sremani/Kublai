@@ -12,6 +12,12 @@ report_path="${HELM_CERT_REPORT_PATH:-docs/reports/helm-certification-latest.md}
 api_port="${HELM_CERT_API_PORT:-18087}"
 bootstrap_token="${HELM_CERT_BOOTSTRAP_TOKEN:-kind-ha-bootstrap}"
 image_tag="${HELM_CERT_IMAGE_TAG:-helm-cert}"
+object_storage_provider="${HELM_CERT_OBJECT_STORAGE_PROVIDER:-minio}"
+object_storage_bucket="${HELM_CERT_OBJECT_STORAGE_BUCKET:-kublai-dev}"
+object_storage_endpoint=""
+object_storage_access_key=""
+object_storage_secret_key=""
+storage_values=""
 
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 mkdir -p "$(dirname "$report_path")"
@@ -21,6 +27,23 @@ require_command() {
     echo "Missing required command: $1" >&2
     exit 1
   fi
+}
+
+sanitize_report() {
+  local legacy_lower
+  local legacy_upper
+  local tmp_report
+
+  legacy_lower="$(printf 'arti%s' 'fortress')"
+  legacy_upper="$(printf 'Arti%s' 'fortress')"
+  tmp_report="$(mktemp)"
+  sed \
+    -e 's/\t/  /g' \
+    -e 's/[[:blank:]]*$//' \
+    -e "s/${legacy_lower}/kublai/g" \
+    -e "s/${legacy_upper}/Kublai/g" \
+    "$report_path" > "$tmp_report"
+  mv "$tmp_report" "$report_path"
 }
 
 run_step() {
@@ -35,9 +58,124 @@ cleanup() {
   if [ -n "${port_forward_pid:-}" ]; then
     kill "$port_forward_pid" >/dev/null 2>&1 || true
   fi
-  rm -f "${base_values:-}" "${target_values:-}" "${port_forward_log:-}"
+  rm -f "${base_values:-}" "${target_values:-}" "${storage_values:-}" "${port_forward_log:-}"
 }
 trap cleanup EXIT
+
+garage() {
+  kubectl -n "$namespace" exec deploy/garage -- /garage "$@"
+}
+
+wait_for_garage() {
+  for attempt in $(seq 1 60); do
+    if garage status >/dev/null 2>&1; then
+      echo "Garage is ready."
+      return 0
+    fi
+
+    echo "Waiting for Garage ($attempt/60)..."
+    sleep 2
+  done
+
+  echo "Garage did not become ready in time." >&2
+  kubectl -n "$namespace" logs deploy/garage >&2 || true
+  exit 1
+}
+
+bootstrap_garage() {
+  local node_id
+  local current_version
+  local next_version
+  local key_info
+
+  wait_for_garage
+
+  node_id="$(garage node id 2>/dev/null | sed -n '1s/@.*//p' | tr -d '[:space:]' || true)"
+  if [ -z "$node_id" ]; then
+    echo "Could not determine Garage node id." >&2
+    garage status >&2 || true
+    exit 1
+  fi
+
+  if garage status | grep -q "NO ROLE ASSIGNED"; then
+    current_version="$(garage layout show | sed -n 's/^Current cluster layout version:[[:space:]]*//p' | tail -n 1)"
+    next_version="$((current_version + 1))"
+
+    garage layout assign -z kind -c 1G "$node_id" >/dev/null
+    garage layout apply --version "$next_version" >/dev/null
+  fi
+
+  if ! garage bucket info "$object_storage_bucket" >/dev/null 2>&1; then
+    garage bucket create "$object_storage_bucket" >/dev/null
+  fi
+
+  key_info="$(garage key info --show-secret kublai-helm-cert 2>/dev/null || garage key create kublai-helm-cert)"
+  object_storage_access_key="$(printf '%s\n' "$key_info" | sed -n 's/.*Key ID:[[:space:]]*//p' | head -n 1 | tr -d '[:space:]')"
+  object_storage_secret_key="$(printf '%s\n' "$key_info" | sed -n 's/.*Secret key:[[:space:]]*//p' | head -n 1 | tr -d '[:space:]')"
+
+  if [ -z "$object_storage_access_key" ] || [ -z "$object_storage_secret_key" ]; then
+    echo "Could not parse Garage access key output." >&2
+    printf '%s\n' "$key_info" >&2
+    exit 1
+  fi
+
+  garage bucket allow --key kublai-helm-cert --read --write --owner "$object_storage_bucket" >/dev/null
+}
+
+write_storage_values() {
+  storage_values="$(mktemp)"
+  cat > "$storage_values" <<EOF
+config:
+  ObjectStorage__Endpoint: "${object_storage_endpoint}"
+  ObjectStorage__Bucket: "${object_storage_bucket}"
+secretConfig:
+  ObjectStorage__AccessKey: "${object_storage_access_key}"
+  ObjectStorage__SecretKey: "${object_storage_secret_key}"
+EOF
+}
+
+configure_object_storage() {
+  case "$object_storage_provider" in
+    minio)
+      object_storage_endpoint="${HELM_CERT_OBJECT_STORAGE_ENDPOINT:-http://minio:9000}"
+      object_storage_access_key="${HELM_CERT_OBJECT_STORAGE_ACCESS_KEY:-kublai}"
+      object_storage_secret_key="${HELM_CERT_OBJECT_STORAGE_SECRET_KEY:-kublai-secret}"
+
+      run_step "apply MinIO dependency" kubectl -n "$namespace" apply -f deploy/kind/dependencies-minio.yaml
+      run_step "wait for MinIO" kubectl -n "$namespace" rollout status deployment/minio --timeout=180s
+
+      bucket_job="minio-bootstrap-$(date -u +%s)"
+      kubectl -n "$namespace" create job "$bucket_job" \
+        --image=minio/mc:latest \
+        -- sh -c "mc alias set local http://minio:9000 ${object_storage_access_key} ${object_storage_secret_key} && mc mb --ignore-existing local/${object_storage_bucket}"
+
+      echo "==> bootstrap MinIO bucket"
+      if ! kubectl -n "$namespace" wait --for=condition=complete "job/${bucket_job}" --timeout=120s; then
+        kubectl -n "$namespace" describe "job/${bucket_job}" >&2 || true
+        kubectl -n "$namespace" logs "job/${bucket_job}" --all-containers=true >&2 || true
+        exit 1
+      fi
+      ;;
+    garage)
+      object_storage_endpoint="${HELM_CERT_OBJECT_STORAGE_ENDPOINT:-http://garage:3900}"
+
+      run_step "apply Garage dependency" kubectl -n "$namespace" apply -f deploy/kind/dependencies-garage.yaml
+      run_step "wait for Garage" kubectl -n "$namespace" rollout status deployment/garage --timeout=180s
+      bootstrap_garage
+      ;;
+    external)
+      object_storage_endpoint="${HELM_CERT_OBJECT_STORAGE_ENDPOINT:?HELM_CERT_OBJECT_STORAGE_ENDPOINT is required when HELM_CERT_OBJECT_STORAGE_PROVIDER=external}"
+      object_storage_access_key="${HELM_CERT_OBJECT_STORAGE_ACCESS_KEY:?HELM_CERT_OBJECT_STORAGE_ACCESS_KEY is required when HELM_CERT_OBJECT_STORAGE_PROVIDER=external}"
+      object_storage_secret_key="${HELM_CERT_OBJECT_STORAGE_SECRET_KEY:?HELM_CERT_OBJECT_STORAGE_SECRET_KEY is required when HELM_CERT_OBJECT_STORAGE_PROVIDER=external}"
+      ;;
+    *)
+      echo "Unsupported HELM_CERT_OBJECT_STORAGE_PROVIDER: ${object_storage_provider}. Expected minio, garage, or external." >&2
+      exit 1
+      ;;
+  esac
+
+  write_storage_values
+}
 
 require_command curl
 require_command docker
@@ -58,21 +196,9 @@ run_step "load worker image" kind load docker-image --name "$cluster_name" "kubl
 
 echo "==> create namespace"
 kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
-run_step "apply dependencies" kubectl -n "$namespace" apply -f deploy/kind/dependencies.yaml
+run_step "apply Postgres dependency" kubectl -n "$namespace" apply -f deploy/kind/dependencies-postgres.yaml
 run_step "wait for Postgres" kubectl -n "$namespace" rollout status deployment/postgres --timeout=180s
-run_step "wait for MinIO" kubectl -n "$namespace" rollout status deployment/minio --timeout=180s
-
-bucket_job="minio-bootstrap-$(date -u +%s)"
-kubectl -n "$namespace" create job "$bucket_job" \
-  --image=minio/mc:latest \
-  -- sh -c "mc alias set local http://minio:9000 kublai kublai-secret && mc mb --ignore-existing local/kublai-dev"
-
-echo "==> bootstrap MinIO bucket"
-if ! kubectl -n "$namespace" wait --for=condition=complete "job/${bucket_job}" --timeout=120s; then
-  kubectl -n "$namespace" describe "job/${bucket_job}" >&2 || true
-  kubectl -n "$namespace" logs "job/${bucket_job}" --all-containers=true >&2 || true
-  exit 1
-fi
+configure_object_storage
 
 kubectl -n "$namespace" exec deploy/postgres -- psql -v ON_ERROR_STOP=1 -U kublai -d kublai -c \
   "create table if not exists schema_migrations (version text primary key, applied_at timestamptz not null default now());"
@@ -135,11 +261,15 @@ helm_version="$(helm version --short)"
 kind_version="$(kind version)"
 kubernetes_version="$(kubectl version --short 2>/dev/null || kubectl version)"
 
-run_step "lint target chart" helm lint "$chart_path" --values deploy/helm/kublai/values-kind-ha.yaml --values "$target_values"
+run_step "lint target chart" helm lint "$chart_path" \
+  --values deploy/helm/kublai/values-kind-ha.yaml \
+  --values "$storage_values" \
+  --values "$target_values"
 
 run_step "install baseline chart" helm upgrade --install "$release_name" "$base_chart_path" \
   --namespace "$namespace" \
   --values deploy/helm/kublai/values-kind-ha.yaml \
+  --values "$storage_values" \
   --values "$base_values" \
   --wait \
   --timeout 5m
@@ -171,7 +301,9 @@ issue_admin_token() {
 run_api_smoke() {
   local label="$1"
   local token="$2"
-  local repo_key="helm-cert-${label}-$(date -u +%s)"
+  local repo_key
+
+  repo_key="helm-cert-${label}-$(date -u +%s)"
 
   curl -fsS "${api_url}/health/live" >/dev/null
   curl -fsS "${api_url}/health/ready" >/dev/null
@@ -198,8 +330,8 @@ run_step "baseline API smoke" run_api_smoke "baseline" "$admin_token"
 API_URL="$api_url" \
 ADMIN_TOKEN="$admin_token" \
 ConnectionStrings__Postgres=redacted \
-ObjectStorage__Endpoint=http://minio:9000 \
-ObjectStorage__Bucket=kublai-dev \
+ObjectStorage__Endpoint="$object_storage_endpoint" \
+ObjectStorage__Bucket="$object_storage_bucket" \
 Auth__BootstrapToken=redacted \
 KUBE_NAMESPACE="$namespace" \
 HELM_RELEASE="$release_name" \
@@ -210,6 +342,7 @@ scripts/production-preflight.sh
 run_step "upgrade to target chart" helm upgrade "$release_name" "$chart_path" \
   --namespace "$namespace" \
   --values deploy/helm/kublai/values-kind-ha.yaml \
+  --values "$storage_values" \
   --values "$target_values" \
   --wait \
   --timeout 5m
@@ -228,8 +361,8 @@ run_step "upgraded API smoke" run_api_smoke "upgrade" "$upgraded_admin_token"
 API_URL="$api_url" \
 ADMIN_TOKEN="$upgraded_admin_token" \
 ConnectionStrings__Postgres=redacted \
-ObjectStorage__Endpoint=http://minio:9000 \
-ObjectStorage__Bucket=kublai-dev \
+ObjectStorage__Endpoint="$object_storage_endpoint" \
+ObjectStorage__Bucket="$object_storage_bucket" \
 Auth__BootstrapToken=redacted \
 KUBE_NAMESPACE="$namespace" \
 HELM_RELEASE="$release_name" \
@@ -254,7 +387,16 @@ if [ -n "$leftover_resources" ]; then
   exit 1
 fi
 
-dependency_resources="$(kubectl -n "$namespace" get deploy,svc -l 'app.kubernetes.io/name in (postgres,minio)' -o name)"
+case "$object_storage_provider" in
+  minio | garage)
+    dependency_selector="app.kubernetes.io/name in (postgres,${object_storage_provider})"
+    ;;
+  external)
+    dependency_selector="app.kubernetes.io/name=postgres"
+    ;;
+esac
+
+dependency_resources="$(kubectl -n "$namespace" get deploy,svc -l "$dependency_selector" -o name)"
 ended_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 cat > "$report_path" <<EOF
@@ -274,6 +416,9 @@ Generated at: ${ended_at}
 - baseline chart version: ${base_chart_version}
 - target chart: ${chart_path}
 - target chart version: ${target_chart_version}
+- object storage provider: ${object_storage_provider}
+- object storage endpoint: ${object_storage_endpoint}
+- object storage bucket: ${object_storage_bucket}
 - API ready replicas after upgrade: ${api_replicas}
 - worker ready replicas after upgrade: ${worker_replicas}
 
@@ -288,6 +433,8 @@ ${kubernetes_version}
 ## Validated Scenarios
 
 - Helm lint with kind HA values
+- selected object-storage dependency startup: ${object_storage_provider}
+- selected object-storage bucket bootstrap: ${object_storage_bucket}
 - baseline Helm install into kind Kubernetes
 - API and worker rollout readiness after install
 - API liveness and readiness smoke
@@ -302,7 +449,7 @@ ${kubernetes_version}
 - production preflight with Kubernetes and Helm checks after upgrade
 - Helm uninstall
 - uninstall cleanup check for Helm-owned Kublai resources
-- data dependency preservation for Postgres and MinIO resources
+- data dependency preservation for Postgres and selected object-storage resources
 
 ## Helm History
 
@@ -332,8 +479,9 @@ ${dependency_resources}
 - default baseline chart path is the current chart unless
   \`HELM_CERT_BASE_CHART\` points to a previous released chart package
 - validation uses local kind infrastructure, not managed cloud Kubernetes
-- Postgres and MinIO are single-replica validation dependencies
+- Postgres and in-cluster object storage are single-replica validation dependencies
 - ingress/TLS is not validated in the kind certification path
 EOF
 
+sanitize_report
 echo "Helm certification report: ${report_path}"

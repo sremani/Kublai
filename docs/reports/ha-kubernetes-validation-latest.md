@@ -1,15 +1,18 @@
 # HA Kubernetes Validation Report
 
-Generated at: 2026-04-28T04:03:25Z
+Generated at: 2026-04-29T04:53:52Z
 
 ## Summary
 
 - overall status: PASS
-- started at: 2026-04-28T03:59:20Z
-- ended at: 2026-04-28T04:03:25Z
+- started at: 2026-04-29T04:50:42Z
+- ended at: 2026-04-29T04:53:52Z
 - cluster: kublai-ha
 - namespace: kublai-ha-validation
 - release: kublai
+- object storage provider: garage
+- object storage endpoint: http://garage:3900
+- object storage bucket: kublai-dev
 - API ready replicas: 3
 - worker ready replicas: 2
 
@@ -28,8 +31,9 @@ Server Version: v1.35.0
 - kind cluster creation or reuse
 - local API and worker image builds
 - image load into kind nodes
-- in-cluster Postgres and MinIO dependency startup
-- MinIO bucket bootstrap
+- in-cluster Postgres dependency startup
+- selected object-storage dependency startup: garage
+- selected object-storage bucket bootstrap: kublai-dev
 - SQL migrations applied through current head
 - Helm install/upgrade
 - API and worker rollout readiness
@@ -42,16 +46,14 @@ Server Version: v1.35.0
 ## Pod Placement
 
 ```text
-NAME                                  READY   STATUS      RESTARTS   AGE     IP            NODE                      NOMINATED NODE   READINESS GATES
-kublai-api-58f4cc9b7d-5vz6z     1/1     Running     0          12s     10.244.2.13   kublai-ha-worker    <none>           <none>
-kublai-api-58f4cc9b7d-mc6fr     1/1     Running     0          2m37s   10.244.1.6    kublai-ha-worker2   <none>           <none>
-kublai-api-58f4cc9b7d-qhqfr     1/1     Running     0          12s     10.244.2.12   kublai-ha-worker    <none>           <none>
-kublai-worker-9b9fb4d94-f7kh9   1/1     Running     0          13s     10.244.2.11   kublai-ha-worker    <none>           <none>
-kublai-worker-9b9fb4d94-fhgc6   1/1     Running     0          13s     10.244.1.7    kublai-ha-worker2   <none>           <none>
-minio-b957f555c-pb8l9                 1/1     Running     0          9m20s   10.244.1.2    kublai-ha-worker2   <none>           <none>
-minio-bootstrap-1777348452-sld4z      0/1     Completed   0          9m13s   10.244.2.3    kublai-ha-worker    <none>           <none>
-minio-bootstrap-1777348760-842nn      0/1     Completed   0          4m5s    10.244.2.7    kublai-ha-worker    <none>           <none>
-postgres-5b9d58bb58-62jdg             1/1     Running     0          9m20s   10.244.2.2    kublai-ha-worker    <none>           <none>
+NAME                             READY   STATUS    RESTARTS   AGE     IP            NODE                      NOMINATED NODE   READINESS GATES
+garage-5bf596c9c-4x9c8           1/1     Running   0          3m10s   10.244.2.8    kublai-ha-worker2   <none>           <none>
+kublai-api-79db9f4959-gmwpf      1/1     Running   0          12s     10.244.1.21   kublai-ha-worker    <none>           <none>
+kublai-api-79db9f4959-hlcw6      1/1     Running   0          12s     10.244.1.20   kublai-ha-worker    <none>           <none>
+kublai-api-79db9f4959-sjt6z      1/1     Running   0          2m37s   10.244.2.12   kublai-ha-worker2   <none>           <none>
+kublai-worker-6459b564ff-7xp2f   1/1     Running   0          13s     10.244.1.19   kublai-ha-worker    <none>           <none>
+kublai-worker-6459b564ff-nlj7c   1/1     Running   0          13s     10.244.2.13   kublai-ha-worker2   <none>           <none>
+postgres-7877bd4588-t8nqr        1/1     Running   0          16m     10.244.1.12   kublai-ha-worker    <none>           <none>
 ```
 
 ## Production Preflight
@@ -61,6 +63,6 @@ postgres-5b9d58bb58-62jdg             1/1     Running     0          9m20s   10.
 ## Residual Risks
 
 - validation uses local kind infrastructure, not managed cloud Kubernetes
-- Postgres and MinIO are single-replica validation dependencies
+- Postgres and in-cluster object storage are single-replica validation dependencies
 - ingress/TLS is not validated in the kind path
 - production capacity is not certified by this validation
