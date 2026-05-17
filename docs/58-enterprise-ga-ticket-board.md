@@ -79,7 +79,7 @@ following without direct maintainer intervention:
 | EGA-36T | Validate Garage provider contract tests in CI | P0 | Validation | done |
 | EGA-37 | Add Garage-backed CI compatibility lane | P0 | Storage/CI | done |
 | EGA-37T | Validate Garage CI evidence and report publication | P0 | Validation | done |
-| EGA-40 | Resolve Garage compatibility Node 20 action warning | P0 | CI/Supply Chain | todo |
+| EGA-40 | Resolve Garage compatibility Node 20 action warning | P0 | CI/Supply Chain | done |
 | EGA-38 | Add Garage option for kind and Helm validation dependencies | P1 | Deployment | done |
 | EGA-38T | Validate Garage kind and Helm dependency option | P1 | Validation | done |
 | EGA-39 | Document Garage operations, licensing, and migration decision | P1 | Storage/Ops | done |
@@ -605,10 +605,14 @@ Acceptance criteria:
   `docs/reports/garage-compatibility-latest.md` in the step summary.
 
 Status:
-- todo
+- done
+- upgraded `.github/workflows/garage-compatibility.yml` to
+  `actions/upload-artifact@v7`
+- added artifact-test coverage requiring the Node 24-compatible artifact upload
+  action
 - discovered during post-rc.3 evidence push on run `25978885047`
-- warning source: `.github/workflows/garage-compatibility.yml` uses
-  `actions/upload-artifact@v4`
+- validation run: `25980700987`
+- validation result: PASS with zero check annotations
 
 ### EGA-38: Add Garage option for kind and Helm validation dependencies
 

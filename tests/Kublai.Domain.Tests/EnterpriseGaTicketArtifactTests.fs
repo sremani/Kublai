@@ -183,6 +183,7 @@ let ``Garage evaluation lane is tracked and runnable`` () =
     assertContains "| EGA-36T | Validate Garage provider contract tests in CI | P0 | Validation | done |" board
     assertContains "| EGA-37 | Add Garage-backed CI compatibility lane | P0 | Storage/CI | done |" board
     assertContains "| EGA-37T | Validate Garage CI evidence and report publication | P0 | Validation | done |" board
+    assertContains "| EGA-40 | Resolve Garage compatibility Node 20 action warning | P0 | CI/Supply Chain | done |" board
     assertContains "| EGA-38 | Add Garage option for kind and Helm validation dependencies | P1 | Deployment | done |" board
     assertContains "| EGA-38T | Validate Garage kind and Helm dependency option | P1 | Validation | done |" board
     assertContains "| EGA-39 | Document Garage operations, licensing, and migration decision | P1 | Storage/Ops | done |" board
