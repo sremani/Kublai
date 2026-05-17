@@ -1,6 +1,6 @@
 # Performance Workflow Baseline Report
 
-Generated at: 2026-04-29T02:25:47Z
+Generated at: 2026-05-10T21:38:35Z
 
 ## Summary
 
@@ -11,9 +11,9 @@ Generated at: 2026-04-29T02:25:47Z
 
 | Workload | Status | Operation count | Operation label | Elapsed (ms) | Ops/sec |
 |---|---|---:|---|---:|---:|
-| ER-701 publish workflow baseline batch completes | PASS | 24 | publish completions | 1866 | 12.86 |
-| ER-701 search query baseline batch completes | PASS | 72 | search queries | 1857 | 38.77 |
-| ER-701 quarantine workflow baseline batch completes | PASS | 30 | quarantine workflow operations | 1715 | 17.49 |
+| ER-701 publish workflow baseline batch completes | PASS | 24 | publish completions | 1803 | 13.31 |
+| ER-701 search query baseline batch completes | PASS | 72 | search queries | 1923 | 37.44 |
+| ER-701 quarantine workflow baseline batch completes | PASS | 30 | quarantine workflow operations | 1662 | 18.05 |
 
 ## Reproduce
 

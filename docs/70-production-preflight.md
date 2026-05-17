@@ -23,6 +23,16 @@ ASPNETCORE_ENVIRONMENT=Production \
 scripts/production-preflight.sh
 ```
 
+When the public ingress is HTTPS but checks are executed from an operator
+workstation through a private tunnel or port-forward, keep `API_URL` set to the
+public ingress and set `PREFLIGHT_CHECK_URL` to the reachable probe base URL:
+
+```bash
+API_URL=https://kublai.example.com \
+PREFLIGHT_CHECK_URL=http://127.0.0.1:18086 \
+scripts/production-preflight.sh
+```
+
 Optional Kubernetes and Helm checks:
 
 ```bash

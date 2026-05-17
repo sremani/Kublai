@@ -1,10 +1,10 @@
 # Enterprise Verification Report
 
-Generated at: 2026-04-28T03:18:56Z
+Generated at: 2026-05-10T21:37:47Z
 
 ## Environment
 
-- git commit: f0386a55e60ee8bfe20bad6547f14d2d63a0f5ac
+- git commit: 5660ea16e35d20334ab197f76022b8afb054d37f
 - git branch: master
 - .NET SDK: 10.0.107
 - .NET runtime: 10.0.7
@@ -14,7 +14,7 @@ Generated at: 2026-04-28T03:18:56Z
 | Step | Command | Status | Duration Seconds |
 |---|---|---:|---:|
 | unit test suite | `make test` | PASS | 6 |
-| integration test suite | `make test-integration` | PASS | 8 |
+| integration test suite | `make test-integration` | PASS | 7 |
 | phase2 throughput baseline | `make phase2-load` | PASS | 7 |
 | upgrade compatibility drill | `bash scripts/upgrade-compatibility-drill.sh` | PASS | 13 |
 | phase6 backup and restore drill | `bash scripts/phase6-drill.sh` | PASS | 13 |
@@ -26,9 +26,9 @@ Generated at: 2026-04-28T03:18:56Z
 ## Summary
 
 - overall status: PASS
-- started at: 2026-04-28T03:18:56Z
-- ended at: 2026-04-28T03:19:50Z
-- total duration seconds: 54
+- started at: 2026-05-10T21:37:47Z
+- ended at: 2026-05-10T21:38:40Z
+- total duration seconds: 53
 
 ## Generated Evidence
 

@@ -1,12 +1,12 @@
 # Garage Compatibility Report
 
-Generated at: 2026-04-29T04:16:59Z
+Generated at: 2026-05-10T21:38:54Z
 
 ## Summary
 
 - Result: PASS
-- Started at: 2026-04-29T04:16:56Z
-- Completed at: 2026-04-29T04:16:59Z
+- Started at: 2026-05-10T21:38:51Z
+- Completed at: 2026-05-10T21:38:54Z
 - Endpoint: http://127.0.0.1:3900
 - Bucket: kublai-garage-compat
 - Garage image: dxflrs/garage:v2.3.0

@@ -4,6 +4,7 @@ set -u -o pipefail
 REPORT_PATH="${PREFLIGHT_REPORT_PATH:-docs/reports/production-preflight-latest.md}"
 CURL_TIMEOUT_SECONDS="${PREFLIGHT_CURL_TIMEOUT_SECONDS:-10}"
 OFFLINE_MODE="${PREFLIGHT_OFFLINE:-false}"
+CHECK_URL="${PREFLIGHT_CHECK_URL:-${API_URL:-}}"
 
 mkdir -p "$(dirname "$REPORT_PATH")"
 
@@ -84,7 +85,7 @@ http_get() {
   local output_path="$2"
   shift 2
 
-  curl -sS --max-time "$CURL_TIMEOUT_SECONDS" "$@" "$url" > "$output_path" 2>&1
+  curl -fsS --max-time "$CURL_TIMEOUT_SECONDS" "$@" "$url" > "$output_path" 2>&1
 }
 
 check_json_status_ready() {
@@ -157,18 +158,18 @@ fi
 if [ "$OFFLINE_MODE" = "true" ]; then
   record "online API checks" WARN "skipped because PREFLIGHT_OFFLINE=true"
 else
-  if [ -n "${API_URL:-}" ]; then
+  if [ -n "${CHECK_URL:-}" ]; then
     live_output="$(mktemp)"
     ready_output="$(mktemp)"
     ops_output="$(mktemp)"
 
-    if http_get "${API_URL%/}/health/live" "$live_output"; then
+    if http_get "${CHECK_URL%/}/health/live" "$live_output"; then
       record "/health/live" PASS "endpoint responded"
     else
       record "/health/live" FAIL "endpoint did not respond"
     fi
 
-    if http_get "${API_URL%/}/health/ready" "$ready_output"; then
+    if http_get "${CHECK_URL%/}/health/ready" "$ready_output"; then
       if check_json_status_ready "$ready_output"; then
         record "/health/ready" PASS "status is ready"
       else
@@ -179,7 +180,7 @@ else
     fi
 
     if [ -n "${ADMIN_TOKEN:-}" ]; then
-      if http_get "${API_URL%/}/v1/admin/ops/summary" "$ops_output" -H "Authorization: Bearer ${ADMIN_TOKEN}"; then
+      if http_get "${CHECK_URL%/}/v1/admin/ops/summary" "$ops_output" -H "Authorization: Bearer ${ADMIN_TOKEN}"; then
         record "/v1/admin/ops/summary" PASS "endpoint responded"
       else
         record "/v1/admin/ops/summary" FAIL "endpoint did not respond with provided admin token"
@@ -189,6 +190,8 @@ else
     fi
 
     rm -f "$live_output" "$ready_output" "$ops_output"
+  else
+    record "online API checks" FAIL "API_URL or PREFLIGHT_CHECK_URL is required"
   fi
 fi
 
