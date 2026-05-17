@@ -1,6 +1,6 @@
 # Release Provenance and Verification
 
-Last updated: 2026-04-28
+Last updated: 2026-05-17
 
 ## Purpose
 
@@ -120,8 +120,8 @@ Do not promote a release candidate unless all are true:
 
 ## Latest Evidence
 
-- signed tag: `v0.1.0-rc.2`
-- release workflow run: `25079528537`
+- signed tag: `v0.1.0-rc.3`
+- release workflow run: `25978805669`
 - GitHub Release type: prerelease
 - evidence report: `docs/reports/release-provenance-latest.md`
 - status: `PASS`

@@ -329,8 +329,8 @@ Acceptance criteria:
 - Any manual gaps in the release process become tickets before GA.
 
 Status:
-- done for signed tag `v0.1.0-rc.2`
-- release workflow run: `25079528537`
+- done for signed tag `v0.1.0-rc.3`
+- release workflow run: `25978805669`
 - certification helper:
   `scripts/release-provenance-certify.sh`
 - repeatable command: `make release-provenance-certify TAG=v<version>`
