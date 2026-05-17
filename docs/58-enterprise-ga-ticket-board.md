@@ -1,6 +1,6 @@
 # Enterprise GA Ticket Board
 
-Last updated: 2026-04-29
+Last updated: 2026-05-17
 
 ## Purpose
 
@@ -79,6 +79,7 @@ following without direct maintainer intervention:
 | EGA-36T | Validate Garage provider contract tests in CI | P0 | Validation | done |
 | EGA-37 | Add Garage-backed CI compatibility lane | P0 | Storage/CI | done |
 | EGA-37T | Validate Garage CI evidence and report publication | P0 | Validation | done |
+| EGA-40 | Resolve Garage compatibility Node 20 action warning | P0 | CI/Supply Chain | todo |
 | EGA-38 | Add Garage option for kind and Helm validation dependencies | P1 | Deployment | done |
 | EGA-38T | Validate Garage kind and Helm dependency option | P1 | Validation | done |
 | EGA-39 | Document Garage operations, licensing, and migration decision | P1 | Storage/Ops | done |
@@ -588,6 +589,27 @@ Status:
   `docs/reports/garage-compatibility-latest.md` to the GitHub step summary,
   and uploads the same report as the `garage-compatibility-report` artifact.
 
+### EGA-40: Resolve Garage compatibility Node 20 action warning
+
+Scope:
+- Upgrade `.github/workflows/garage-compatibility.yml` off any action versions
+  that still execute on deprecated GitHub Actions Node 20 runtimes.
+- Preserve the Garage compatibility report upload and job summary behavior.
+- Re-run the Garage compatibility workflow after the action upgrade.
+
+Acceptance criteria:
+- The Garage compatibility workflow no longer emits a hosted-runner Node 20
+  deprecation warning.
+- `garage-compatibility` passes on `master` after the workflow action upgrade.
+- The workflow still uploads `garage-compatibility-report` and publishes
+  `docs/reports/garage-compatibility-latest.md` in the step summary.
+
+Status:
+- todo
+- discovered during post-rc.3 evidence push on run `25978885047`
+- warning source: `.github/workflows/garage-compatibility.yml` uses
+  `actions/upload-artifact@v4`
+
 ### EGA-38: Add Garage option for kind and Helm validation dependencies
 
 Scope:
@@ -1069,9 +1091,9 @@ Status:
 ## Recommended Execution Order
 
 1. Close P0 product envelope, release, install, support, SLO, HA, provenance,
-   durable verification-evidence, launch infrastructure, storage-risk, and
-   branding tickets: `EGA-01` through `EGA-14`, plus `EGA-31` through
-   `EGA-34`.
+   durable verification-evidence, launch infrastructure, storage-risk,
+   branding, and CI runtime tickets: `EGA-01` through `EGA-14`, plus `EGA-31`
+   through `EGA-34`, and `EGA-40`.
 2. Close P1 procurement, compliance, security response, operator UX, tenant
    lifecycle, cloud examples, release-artifact drills, capacity certification,
    and package compatibility strategy: `EGA-15` through `EGA-25`.
