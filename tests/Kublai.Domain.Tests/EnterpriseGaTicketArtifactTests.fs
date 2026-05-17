@@ -224,7 +224,7 @@ let ``Garage evaluation lane is tracked and runnable`` () =
     assertContains "make garage-compatibility-validate" workflow
     assertContains "docs/reports/garage-compatibility-latest.md" workflow
     assertContains "GITHUB_STEP_SUMMARY" workflow
-    assertContains "actions/upload-artifact" workflow
+    assertContains "actions/upload-artifact@v7" workflow
     assertContains "garage-compatibility-report" workflow
     assertContains "src/Kublai.Api/ObjectStorage.fs" workflow
     assertContains "scripts/garage-compatibility-validate.sh" workflow
